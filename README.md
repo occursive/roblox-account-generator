@@ -32,7 +32,7 @@
 ## ✍️ Usage
 1. **Run** `pip install -r requirements.txt`
 2. **Put** your fastcap key into `input/config.json`
-3. **Put** your proxies in `input/proxies.txt` *(ip:port@username:password)*
+3. **Put** your proxies in `input/proxies.txt` *(username:password@ip:port)*
 4. **Run** `python main.py`
 5. If you like it, **give a ⭐️ star** to the repo
 
