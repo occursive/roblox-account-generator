@@ -1,68 +1,40 @@
-import time, os, ctypes, threading
-from utils import wprint
-from core import start
+from core import thread_worker
+from utils import *
+import threading
+import os
 
-def set_console_title(title):
-    ctypes.windll.kernel32.SetConsoleTitleW(title)
-
-generated = 0
-failed = 0
-crashed = False
-
-lock = threading.Lock()
-start_time = None
-
-def worker():
-    global generated, failed, crashed
-    while not crashed:
-        success, local_crashed = start()
-        with lock:
-            if local_crashed:
-                crashed = True
-            elif success:
-                generated += 1
-            else:
-                failed += 1
-
-def title_updater():
-    while not crashed:
-        with lock:
-            if start_time is None:
-                continue
-            elapsed = time.time() - start_time
-            minutes = elapsed / 60 if elapsed > 0 else 1
-            cpm = generated / minutes
-            hours, rem = divmod(elapsed, 3600)
-            minutes_elapsed, seconds = divmod(rem, 60)
-            time_str = f"{int(hours):02}:{int(minutes_elapsed):02}:{int(seconds):02}"
-            set_console_title(f"Roblox Account Generator By: t.me/occursive | Generated: {generated} | Failed: {failed} | CPM: {cpm:.2f} | Runtime: {time_str}")
-        time.sleep(1)
+def main():
+    global thread_restart_enabled
+    
+    set_console_title("Roblox Account Generator By: t.me/occursive")
+    
+    proxy_list = load_proxies("input/proxies.txt")
+    if not proxy_list:
+        fprint("Failed to load any proxies.")
+        safe_exit()
+        return
+    
+    target_thread_count = input_thread_count()
+    if target_thread_count is None:
+        return
+    
+    os.system('cls' if os.name == 'nt' else 'clear')
+    
+    set_start_time()
+    
+    safe_print(f"{f.LIGHTGREEN_EX}🚀 Tool successfully started!{s.RESET_ALL}\n")
+    
+    for i in range(target_thread_count):
+        start_worker_thread(i + 1, thread_worker)
+    
+    monitor_thread = threading.Thread(target=thread_monitor, args=(thread_worker,), daemon=True)
+    monitor_thread.start()
+    
+    try:
+        monitor_thread.join()
+    except KeyboardInterrupt:
+        thread_restart_enabled = False
+        safe_exit()
 
 if __name__ == "__main__":
-    set_console_title("Roblox Account Generator By: t.me/occursive")
-
-    while True:
-        thread_count = input(" > Enter number of threads (1-10): ")
-        if thread_count.isdigit():
-            thread_count = int(thread_count)
-            if 1 <= thread_count <= 10:
-                os.system('cls')
-                break
-            else:
-                wprint("Please enter a number between 1 and 10.")
-        else:
-            wprint("Invalid input. Only numbers are allowed.")
-
-    start_time = time.time()
-
-    threads = []
-    updater_thread = threading.Thread(target=title_updater, daemon=True)
-    updater_thread.start()
-
-    for _ in range(thread_count):
-        t = threading.Thread(target=worker)
-        t.start()
-        threads.append(t)
-
-    for t in threads:
-        t.join()
+    main()
