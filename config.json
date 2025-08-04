@@ -1,0 +1,9 @@
+{
+    "proxy_type": "http",
+    "api_keys": {
+        "fastcap": "",
+        "rosolve": ""
+    },
+    "selected_solver": "rosolve"
+}
+
