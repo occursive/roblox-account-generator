@@ -15,7 +15,7 @@
 
 <p align="center">
   <br />
-  <a href="https://discord.gg/wbjvnzVhrd"><img src="https://img.shields.io/badge/Discord%20Server-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Server" /></a>
+  <a href="https://discord.gg/2ZVpYAEEX8"><img src="https://img.shields.io/badge/Discord%20Server-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Server" /></a>
   <br />
   <br />
   <a href="https://t.me/occursive"><img src="https://img.shields.io/badge/Developer-@occursive-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Developer" /></a>
