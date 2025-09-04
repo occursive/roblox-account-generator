@@ -1,4 +1,4 @@
-import random, string, os, sys, json, time, threading, queue
+import random, string, os, sys, json, time, threading
 from datetime import datetime
 from colorama import Fore as f, Style as s, init
 from threading import Lock
@@ -34,6 +34,8 @@ def wprint(text):
     color_print("WARNING", f.YELLOW, f.LIGHTYELLOW_EX, text)
 def fprint(text):
     color_print("FAILURE", f.RED, f.LIGHTRED_EX, text)
+def tprint(text):
+    color_print("THREADS", f.MAGENTA, f.LIGHTMAGENTA_EX, text)
 
 def generate_username():
     roots = ["zarn", "milo", "trev", "kayn", "luro", "jex", "naro", "vask", "dren", "xilo",
@@ -63,6 +65,15 @@ def generate_password():
     password = required + remaining
     random.shuffle(password)
     return ''.join(password)
+
+def get_password():
+    config = load_config()
+    custom_password = config.get("custom_password", {})
+    
+    if custom_password.get("enabled", False):
+        return custom_password.get("password")
+    else:
+        return generate_password()
 
 def load_proxies(filename):
     if not os.path.exists(filename):
@@ -137,6 +148,25 @@ def load_config():
                 fprint("Currently only 'http' is supported.")
                 safe_exit()
             
+            email_verification = config.get("email_verification", None)
+            if email_verification is not None and not isinstance(email_verification, bool):
+                fprint(f"Error: Invalid email_verification '{email_verification}' in config.json.")
+                fprint("The 'email_verification' field in config.json must be set to either true or false.")
+                safe_exit()
+            
+            custom_password = config.get("custom_password", {})
+            if custom_password.get("enabled", False):
+                password = custom_password.get("password", "")
+                if not password:
+                    fprint("Error: Custom password is enabled but password field is empty in config.json")
+                    safe_exit()
+                if len(password) < 8:
+                    fprint(f"Error: Custom password must be at least 8 characters long (current: {len(password)})")
+                    safe_exit()
+                if len(password) > 200:
+                    fprint(f"Error: Custom password must not exceed 200 characters (current: {len(password)})")
+                    safe_exit()
+                
             return config
     except FileNotFoundError:
         fprint("Config file not found: config.json")
@@ -150,9 +180,14 @@ def load_config():
 
 def validate_solver_config():
     config = load_config()
-    valid_solvers = ["fastcap", "rosolve"]
+    valid_solvers = ["rosolve"]
     
-    selected_solver = config.get("selected_solver", "")
+    captcha_settings = config.get("captcha_settings", {})
+    if not captcha_settings:
+        fprint("Error: captcha_settings is missing in config.json.")
+        safe_exit()
+    
+    selected_solver = captcha_settings.get("selected_solver", "")
     
     if not selected_solver:
         fprint("Error: selected_solver is empty in config.json.")
@@ -164,15 +199,25 @@ def validate_solver_config():
         fprint(f"Valid options are: {', '.join(valid_solvers)}")
         safe_exit()
     
-    api_keys = config.get("api_keys", {})
+    api_keys = captcha_settings.get("api_keys", {})
     api_key = api_keys.get(selected_solver, "")
     
     if not api_key:
         fprint(f"Error: API key for '{selected_solver}' is empty in config.json.")
-        fprint(f"Please add your {selected_solver} API key to config.json.")
+        fprint(f"Please add your {selected_solver} API key to captcha_settings.api_keys.{selected_solver} in config.json.")
         safe_exit()
     
-    return selected_solver, api_key
+    timeout = captcha_settings.get("timeout", 30)
+    
+    if not isinstance(timeout, (int, float)):
+        fprint("Error: timeout value must be a number in config.json.")
+        safe_exit()
+    
+    if timeout < 10 or timeout > 120:
+        fprint(f"Error: timeout must be between 10 and 120 seconds (current: {timeout}).")
+        safe_exit()
+    
+    return selected_solver, api_key, timeout
 
 def set_console_title(title):
     if os.name == "nt":
@@ -194,6 +239,13 @@ def safe_exit():
     except (EOFError, ValueError, KeyboardInterrupt):
         time.sleep(10)
     sys.exit(1)
+
+def wait_for_threads_and_exit(message="All threads have stopped. Exiting..."):
+    while get_active_worker_threads() > 0:
+        time.sleep(0.5)
+    
+    tprint(message)
+    safe_exit()
 
 def set_start_time():
     global start_time
