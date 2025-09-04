@@ -29,32 +29,63 @@
 - **Fully request-based**
 - **Advanced TLS spoofing**
 - **High-performance multi-threading**
+- **Automatic failure protection**
 - **Proxy Support**
+- **Email verify support**
 - **Avatar auto-change (after reaching stars)**
 
 > [!NOTE]
-> The tool supports funcaptcha solvers from both [Rosolve](https://rosolve.pro/) and [Fastcap](https://fastcap.xyz/). I recommend using the [Rosolve](https://rosolve.pro/) solver for better performance. Feel free to message me if you need a different solver.
+> The tool supports funcaptcha solver from [Rosolve](https://rosolve.pro/) and email verification using a free temporary email service ([priyo.email](https://v3.priyo.email/)). If you need integration with a different captcha solver or email verification provider, contact me.
 
 ## ✍️ Usage
 1. **Run** `pip install -r requirements.txt`
-2. **Put** your rosolve or fastcap key into `config.json`
-3. **Change** `selected_solver` to `rosolve` or `fastcap` in `config.json`
-4. **Put** your proxies in `input/proxies.txt` *(username:password@host:port)*
-5. **Run** `python main.py`
-6. If you like it, **give a ⭐️ star** to the repo
+2. **Configure** `config.json`:
+    - **Add** your RoSolve API key to `api_keys`
+    - **Set** `custom_password` to `true` and add your password ***(optional)***
+    - **Set** `email_verification` to `true` to verify generated accounts with email ***(optional)***
+3. **Put** your proxies in `input/proxies.txt` *(username:password@host:port)*
+4. **Run** python main.py
+5. **If you like it, give a ⭐️ star to the repo**
+
+
+## ⚙️ Configuration
+```json
+{
+    "proxy_type": "http",                    // Proxy protocol to use (currently only "http" is supported)
+
+    "custom_password": {                     // Custom password configuration for account creation
+        "enabled": false,                    // Enable/disable custom password (true/false)
+        "password": "$password123"           // Your custom password (min 8, max 200 characters)
+    },
+
+    "captcha_settings": {                    // CAPTCHA solver configuration
+        "api_keys": {                        // API keys for different solvers
+            "rosolve": ""                    // Your RoSolve API key (get from rosolve.pro)
+        },
+        "selected_solver": "rosolve",        // Active solver (currently only "rosolve" is supported)
+        "timeout": 30                        // Solver timeout in seconds (10-120)
+    },
+
+    "email_verification": false              // Enable/disable email verification (true/false)
+}
+```
 
 ## 📁 Output
 **All created accounts will be saved in the `output/accounts.txt` file in this format:**
 ```
 userid:username:password:cookie
 ```
+**If email verification is enabled, successfully verified accounts will be saved in `output/verified_accounts.txt` in this format:**
+```
+userid:username:email:password:cookie
+```
 
 ## ✨ Stars to unlock
-- ⭐️ **20 stars: Email verification**
+- ⭐️ **20 stars: Email verification** - 🎉 *UNLOCKED!*
 - ⭐️ **40 stars: Change avatar after creation**
 - ⭐️ **50+ stars: Your ideas**
 > [!TIP]
-> Contact me on [Telegram](https://t.me/occursive) for custom ideas.
+> If you have custom ideas, share them in the `#suggestion` channel on my [Discord server](https://discord.gg/2ZVpYAEEX8).
   
 
 ## ⚠️ Disclaimer
@@ -63,12 +94,14 @@ userid:username:password:cookie
 
 ## 📞 Contact
 
-**Have a question or need help?**
+**Need support or a custom solution? Contact me:**
 
 ```
 Telegram: https://t.me/occursive
 
 Discord: @occursive
+
+Discord server: https://discord.gg/2ZVpYAEEX8
 ```
 
 ---
