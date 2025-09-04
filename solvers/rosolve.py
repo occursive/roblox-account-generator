@@ -1,4 +1,3 @@
-
 import requests, json, time
 
 API_BASE = "https://rosolve.pro"
