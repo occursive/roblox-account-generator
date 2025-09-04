@@ -1,7 +1,7 @@
+import threading, os
 from core import thread_worker
 from utils import *
-import threading
-import os
+from tempmail import get_tempmail_public_apiKey
 
 def main():
     global thread_restart_enabled
@@ -13,6 +13,21 @@ def main():
         fprint("Failed to load any proxies.")
         safe_exit()
         return
+    
+    config = load_config()
+    email_verification = config.get("email_verification", False)
+    
+    if email_verification:
+        safe_print(f"{f.LIGHTBLUE_EX}Email verification: {f.LIGHTGREEN_EX}enabled\n{s.RESET_ALL}")
+        safe_print(f"{f.LIGHTBLUE_EX}Fetching tempmail API key...{s.RESET_ALL}")
+        api_key, error = get_tempmail_public_apiKey()
+        if not api_key:
+            safe_print(f"{f.LIGHTRED_EX}Failed to fetch tempmail API key: {error}")
+            safe_exit()
+            return
+        safe_print(f"{f.LIGHTGREEN_EX}Successfully fetched tempmail API key.\n{s.RESET_ALL}")
+    else:
+        safe_print(f"{f.LIGHTBLUE_EX}Email verification: {f.LIGHTRED_EX}disabled\n{s.RESET_ALL}")
     
     target_thread_count = input_thread_count()
     if target_thread_count is None:
