@@ -1,9 +1,15 @@
 {
     "proxy_type": "http",
-    "api_keys": {
-        "fastcap": "",
-        "rosolve": ""
+    "custom_password": {
+        "enabled": false,
+        "password": "$password123"
     },
-    "selected_solver": "rosolve"
+    "captcha_settings": {
+        "api_keys": {
+            "rosolve": ""
+        },
+        "selected_solver": "rosolve",
+        "timeout": 30
+    },
+    "email_verification": false
 }
-
