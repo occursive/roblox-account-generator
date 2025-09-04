@@ -1,31 +1,38 @@
 import base64, html, time, json, random, threading, os
 from curl_cffi import requests
-from headers import headers1, headers2, headers4, headers5
+from headers import headers1, headers2, headers4, headers5, headers6
 from utils import *
-from solvers.fastcap import fc_get_token
 from solvers.rosolve import rs_get_token
 from secure_auth import get_sa
+from tempmail import get_email, get_inbox
 
-SOLVER, API_KEY = validate_solver_config()
+SOLVER, API_KEY, TIMEOUT = validate_solver_config()
 
 SOLVER_FUNCTIONS = {
-    "fastcap": fc_get_token,
     "rosolve": rs_get_token
 }
 
 MAX_CONSECUTIVE_CAPTCHA_FAILS = 30
+MAX_CONSECUTIVE_CUSTOM_PASSWORD_FAILS = 3
+MAX_CONSECUTIVE_INSUFFICIENT_BALANCE = 3
 
 consecutive_captcha_fails = 0
+consecutive_custom_password_fails = 0
+consecutive_insufficient_balance = 0
 captcha_fail_lock = threading.Lock()
+custom_password_fail_lock = threading.Lock()
+insufficient_balance_lock = threading.Lock()
 
 def thread_worker():
-    global consecutive_captcha_fails, thread_restart_enabled
+    global consecutive_captcha_fails, consecutive_custom_password_fails, consecutive_insufficient_balance, thread_restart_enabled
     while thread_restart_enabled:
         try:
             proxy_lines = load_proxies("input/proxies.txt")
             if not proxy_lines:
-                fprint("No proxies available. Exiting...")
-                break
+                tprint("No proxies available. Stopping all threads...")
+                thread_restart_enabled = False
+                threading.Thread(target=lambda: wait_for_threads_and_exit("No proxies available. All threads stopped.")).start()
+                continue
             
             proxy = random.choice(proxy_lines)
             proxies = {
@@ -37,8 +44,8 @@ def thread_worker():
                 impersonate="chrome", 
                 proxies=proxies
             )
-
-            response = session.get(url="https://www.roblox.com/", headers=headers1())
+            
+            response = session.get(url="https://www.roblox.com/", headers=headers1(), timeout=15)
 
             if response.status_code == 429:
                 fprint(f"API rate limit hit! {response.url}")
@@ -51,7 +58,7 @@ def thread_worker():
 
             username = generate_username()
             birthday = generate_birthday()
-            password = generate_password()
+            password = get_password()
 
             payload = {
                 "username": username,
@@ -59,7 +66,7 @@ def thread_worker():
                 "birthday": birthday
             }
 
-            response = session.post(url="https://auth.roblox.com/v1/usernames/validate", headers=headers2(csrf_token), json=payload)
+            response = session.post(url="https://auth.roblox.com/v1/usernames/validate", headers=headers2(csrf_token), json=payload, timeout=15)
 
             if response.status_code != 200:
                 if response.status_code == 403:
@@ -90,7 +97,7 @@ def thread_worker():
                     "birthday": birthday
                 }
 
-                response = session.post(url="https://auth.roblox.com/v1/usernames/validate", headers=headers2(csrf_token), json=payload)
+                response = session.post(url="https://auth.roblox.com/v1/usernames/validate", headers=headers2(csrf_token), json=payload, timeout=15)
 
                 if response.status_code == 403:
                     csrf_token = response.headers.get('x-csrf-token')
@@ -115,13 +122,27 @@ def thread_worker():
             
             if not thread_restart_enabled:
                 continue
-            response = session.post(url="https://auth.roblox.com/v2/passwords/validate", headers=headers2(csrf_token), json=payload)
+            response = session.post(url="https://auth.roblox.com/v2/passwords/validate", headers=headers2(csrf_token), json=payload, timeout=15)
             data = response.json()
 
             if data["message"] != "Password is valid":
-                fprint(f"Request failed with status code {response.status_code}: {response.url}")
-                update_counter("failed")
-                continue
+                config = load_config()
+                if config.get("custom_password", {}).get("enabled", False):
+                    with custom_password_fail_lock:
+                        if consecutive_custom_password_fails >= MAX_CONSECUTIVE_CUSTOM_PASSWORD_FAILS:
+                            continue
+                        consecutive_custom_password_fails += 1
+                        fprint(f"Custom password validation failed! ({consecutive_custom_password_fails}/{MAX_CONSECUTIVE_CUSTOM_PASSWORD_FAILS})")
+                        update_counter("failed")
+                        if consecutive_custom_password_fails == MAX_CONSECUTIVE_CUSTOM_PASSWORD_FAILS:
+                            tprint(f"Too many consecutive custom password failures. Stopping all threads...")
+                            thread_restart_enabled = False
+                            threading.Thread(target=lambda: wait_for_threads_and_exit("Too many consecutive custom password failures. All threads stopped.")).start()
+                    continue
+                else:
+                    fprint(f"Request failed with status code {response.status_code}: {response.url}")
+                    update_counter("failed")
+                    continue
 
             client_public_key, client_epoch_timestamp, server_nonce, sai_signature = get_sa(session)
 
@@ -148,7 +169,7 @@ def thread_worker():
                 }
             }
 
-            response = session.post(url="https://auth.roblox.com/v2/signup", headers=headers4(csrf_token, "auth.roblox.com"), json=signup_payload)
+            response = session.post(url="https://auth.roblox.com/v2/signup", headers=headers4(csrf_token, "auth.roblox.com"), json=signup_payload, timeout=15)
             data = json.loads(response.text)
 
             if data["errors"][0]["message"] != "Challenge is required to authorize the request":
@@ -167,9 +188,25 @@ def thread_worker():
                 continue
                 
             solver_func = SOLVER_FUNCTIONS[SOLVER]
-            data, reason = solver_func(blob, proxy, API_KEY)
+            data, reason = solver_func(blob, proxy, API_KEY, TIMEOUT)
 
             if data == None:
+                if "Insufficient solves" in reason:
+                    with insufficient_balance_lock:
+                        if consecutive_insufficient_balance >= MAX_CONSECUTIVE_INSUFFICIENT_BALANCE:
+                            break
+                        consecutive_insufficient_balance += 1
+                        fprint(f"Failed to solve captcha: {reason}")
+                        update_counter("failed")
+                        if consecutive_insufficient_balance == MAX_CONSECUTIVE_INSUFFICIENT_BALANCE:
+                            tprint("Captcha solver has no remaining balance to continue. Stopping all threads...")
+                            thread_restart_enabled = False
+                            threading.Thread(target=lambda: wait_for_threads_and_exit("Captcha solver has no remaining balance to continue. All threads stopped.")).start()
+                    continue
+                else:
+                    with insufficient_balance_lock:
+                        consecutive_insufficient_balance = 0
+                    
                 with captcha_fail_lock:
                     if consecutive_captcha_fails >= MAX_CONSECUTIVE_CAPTCHA_FAILS:
                         break
@@ -177,13 +214,15 @@ def thread_worker():
                     fprint(f"Failed to solve captcha: {reason}")
                     update_counter("failed")
                     if consecutive_captcha_fails == MAX_CONSECUTIVE_CAPTCHA_FAILS:
-                        fprint(f"Too many consecutive captcha failures ({consecutive_captcha_fails}). Stopping all threads.")
+                        tprint(f"Too many consecutive CAPTCHA failures ({consecutive_captcha_fails}). Stopping all threads...")
                         thread_restart_enabled = False
-                        threading.Thread(target=lambda: (time.sleep(0.5), safe_exit())).start()
+                        threading.Thread(target=lambda: wait_for_threads_and_exit("Too many consecutive CAPTCHA failures. All threads stopped.")).start()
                 continue
                 
             with captcha_fail_lock:
                 consecutive_captcha_fails = 0
+            with insufficient_balance_lock:
+                consecutive_insufficient_balance = 0
             md = data.split("|")[0] + data.split("pk=A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F")[1].split("|cdn_url=")[0]
             caprint(f"Captcha solved: {md}")
 
@@ -199,7 +238,7 @@ def thread_worker():
                 "challengeMetadata": json.dumps(metadata)
             }
 
-            response = session.post(url="https://apis.roblox.com/challenge/v1/continue", headers=headers4(csrf_token, "apis.roblox.com"), json=payload)
+            response = session.post(url="https://apis.roblox.com/challenge/v1/continue", headers=headers4(csrf_token, "apis.roblox.com"), json=payload, timeout=15)
 
             if response.status_code != 200:
                 fprint(f"Request failed with status code {response.status_code}: {response.url}")
@@ -208,7 +247,7 @@ def thread_worker():
 
             encrypted_metadata = base64.b64encode(json.dumps(metadata).encode('utf-8')).decode('utf-8')
 
-            response = session.post(url="https://auth.roblox.com/v2/signup", headers=headers5(encrypted_metadata, csrf_token, challenge_id), json=signup_payload)
+            response = session.post(url="https://auth.roblox.com/v2/signup", headers=headers5(encrypted_metadata, csrf_token, challenge_id), json=signup_payload, timeout=15)
 
             if response.status_code != 200:
                 fprint(f"Request failed with status code {response.status_code}: {response.url}")
@@ -217,21 +256,89 @@ def thread_worker():
             
             data = response.json()
             user_id = data['userId']
+            cookie = response.cookies['.ROBLOSECURITY']
             
-            with lock:
-                os.makedirs("output", exist_ok=True)
-                with open("output/accounts.txt", "a", encoding="utf-8") as file:
-                    file.write(f"{user_id}:{username}:{password}:{response.cookies['.ROBLOSECURITY']}\n")
-                
-            crprint(f"Account created: {username}")
-            update_counter("generated")
+            config = load_config()
+            if config.get("email_verification", False):
+                response = session.get(url="https://www.roblox.com/home", headers=headers1())
+
+                if "data-token=" in response.text:
+                    raw_token = response.text.split('data-token="')[1].split('"')[0]
+                    csrf_token = html.unescape(raw_token)
+
+                    email, reason = get_email(session)
+                    
+                    if email:
+                        payload = {
+                            "emailAddress": email,
+                            "password": ""
+                        }
+                        
+                        response = session.post(url="https://accountsettings.roblox.com/v1/email", headers=headers6(csrf_token, "accountsettings.roblox.com"), json=payload, timeout=15)
+                        
+                        if response.status_code == 200:
+                            ticket, reason = get_inbox(session, email)
+                            if ticket:                     
+                                payload = {
+                                    "ticket": ticket
+                                }
+                                
+                                response = session.post(url="https://accountinformation.roblox.com/v1/email/verify", headers=headers6(csrf_token, "accountinformation.roblox.com"), json=payload, timeout=15)
+                                
+                                if "verifiedUserHatAssetId" in response.text:
+                                    with lock:
+                                        os.makedirs("output", exist_ok=True)
+                                        with open("output/verified_accounts.txt", "a", encoding="utf-8") as file:
+                                            file.write(f"{user_id}:{username}:{email}:{password}:{cookie}\n")
+                                    crprint(f"Account created & email verified: {username}")
+                                    update_counter("generated")
+                                    continue
+                                else:
+                                    wprint(f"Email verify failed with status code {response.status_code}: {response.url}")
+                            else:
+                                wprint(f"Failed to fetch inbox content: {reason}")
+                        else:
+                            wprint(f"Email verify failed with status code {response.status_code}: {response.url}")
+                    else:
+                        wprint(f"Failed to fetch temp email from API: {reason}")
+                with lock:
+                    os.makedirs("output", exist_ok=True)
+                    with open("output/accounts.txt", "a", encoding="utf-8") as file:
+                        file.write(f"{user_id}:{username}:{password}:{cookie}\n")
+                crprint(f"Account created (email verification failed): {username}")
+                update_counter("generated")
+                continue
+            else:
+                with lock:
+                    os.makedirs("output", exist_ok=True)
+                    with open("output/accounts.txt", "a", encoding="utf-8") as file:
+                        file.write(f"{user_id}:{username}:{password}:{cookie}\n")
+                crprint(f"Account created: {username}")
+                update_counter("generated")
             
         except Exception as e:
-            if 'failed to do request:' in str(e):
-                fprint(f"Failed to send request. The proxy might be invalid or unreachable. Proxy: {proxy}")
-                update_counter("failed")
+            error_msg = str(e).lower()
+            if "could not resolve proxy" in error_msg:
+                fprint(f"Failed to send request (5). The proxy might be invalid or unreachable. Proxy: {proxy}")
+            elif "timed out" in error_msg:
+                fprint(f"Request timed out (28). Proxy: {proxy}")
+            elif "unsupported proxy syntax" in error_msg:
+                fprint(f"Wrong proxy format (5). Please use the following format: 'username:password@host:port'. Proxy: {proxy}")
+            elif "failed to connect to" in error_msg:
+                fprint(f"Connection failed (7): Could not connect to server. Proxy: {proxy}")
+            elif "proxy connect aborted" in error_msg:
+                fprint(f"Proxy CONNECT aborted. (56) The proxy may have refused the connection. Proxy: {proxy}")
+            elif "connect tunnel failed" in error_msg:
+                fprint(f"CONNECT tunnel failed (7). The proxy might be blocking the connection. Proxy: {proxy}")
+            elif "ssl certificate problem" in error_msg:
+                    fprint(f"SSL certificate problem. (60) The server certificate is invalid or untrusted. Proxy: {proxy}")
+            elif "failed to perform, curl: (16)" in error_msg:
+                fprint(f"HTTP/2 framing error (16). The proxy or server has HTTP/2 protocol issues. Proxy: {proxy}")
+            elif "failed to perform, curl: (35)" in error_msg:
+                fprint(f"TLS/SSL connection failed (35). Likely OpenSSL or proxy issue. Proxy: {proxy}")
             else:
-                fprint(f"Error: {e}")
+                fprint(f"Unexpected error: {e}")
+
             update_counter("failed")
             time.sleep(5)
             continue
