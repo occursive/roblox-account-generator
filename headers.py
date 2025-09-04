@@ -97,3 +97,23 @@ def headers5(encrypted_metadata, csrf_token, challenge_id):
     "accept-encoding": "gzip, deflate, br, zstd",
     "accept-language": "en-US,en;q=0.9"
 }
+
+def headers6(csrf_token, host):
+    return {
+    "host": host,
+    "connection": "keep-alive",
+    "sec-ch-ua-platform": "\"Windows\"",
+    "x-csrf-token": csrf_token,
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "accept": "application/json, text/plain, */*",
+    "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+    "content-type": "application/json;charset=UTF-8",
+    "sec-ch-ua-mobile": "?0",
+    "origin": "https://www.roblox.com",
+    "sec-fetch-site": "same-site",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-dest": "empty",
+    "referer": "https://www.roblox.com/",
+    "accept-encoding": "gzip, deflate, br, zstd",
+    "accept-language": "en-US,en;q=0.9"
+}
