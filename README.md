@@ -82,8 +82,12 @@ userid:username:email:password:cookie
 
 ## ✨ Stars to unlock
 - ⭐️ **20 stars: Email verification** - 🎉 *UNLOCKED!*
-- ⭐️ **40 stars: Change avatar after creation**
-- ⭐️ **50+ stars: Your ideas**
+- ⭐️ **50 stars: Change display name after creation** - ⏳ *COMING SOON!*
+- ⭐️ **85 stars: Join group after creation**
+- ⭐️ **100 stars: Change avatar after creation**
+- ⭐️ **140 stars: Follow user after creation**
+- ⭐️ **150+ stars: Your ideas**
+
 > [!TIP]
 > If you have custom ideas, share them in the `#suggestion` channel on my [Discord server](https://discord.gg/2ZVpYAEEX8).
   
