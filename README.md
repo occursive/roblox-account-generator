@@ -30,8 +30,9 @@
 - **Advanced TLS spoofing**
 - **High-performance multi-threading**
 - **Automatic failure protection**
-- **Proxy Support**
-- **Email verify support**
+- **Proxy support**
+- **Email verification**
+- **Custom display name**
 - **Avatar auto-change (after reaching stars)**
 
 > [!NOTE]
@@ -40,11 +41,12 @@
 ## ✍️ Usage
 1. **Run** `pip install -r requirements.txt`
 2. **Configure** `config.json`:
-    - **Add** your RoSolve API key to `api_keys`
+    - **Add** your [Rosolve](https://rosolve.pro/) API key to `api_keys`
     - **Set** `custom_password` to `true` and add your password ***(optional)***
     - **Set** `email_verification` to `true` to verify generated accounts with email ***(optional)***
+    - **Set** `display_name` to `true` to change display name after creation ***(optional)***
 3. **Put** your proxies in `input/proxies.txt` *(username:password@host:port)*
-4. **Run** python main.py
+4. **Run** `python main.py`
 5. **If you like it, give a ⭐️ star to the repo**
 
 
@@ -52,11 +54,6 @@
 ```json
 {
     "proxy_type": "http",                    // Proxy protocol to use (currently only "http" is supported)
-
-    "custom_password": {                     // Custom password configuration for account creation
-        "enabled": false,                    // Enable/disable custom password (true/false)
-        "password": "$password123"           // Your custom password (min 8, max 200 characters)
-    },
 
     "captcha_settings": {                    // CAPTCHA solver configuration
         "api_keys": {                        // API keys for different solvers
@@ -66,7 +63,20 @@
         "timeout": 30                        // Solver timeout in seconds (10-120)
     },
 
-    "email_verification": false              // Enable/disable email verification (true/false)
+    "account_settings": {
+        "custom_password": {                 // Custom password configuration for account creation
+            "enabled": false,                // Enable/disable custom password (true/false)
+            "password": "$password123"       // Your custom password (min 8, max 200 characters)
+        },
+        "email_verification": {
+            "enabled": false                 // Enable/disable email verification (true/false)
+        },
+        "display_name": {                    // Change display name after creation
+            "enabled": false,                // Enable/disable display name change
+            "mode": "from_username",         // "from_username" or "custom"
+            "custom_name": ""                // Required only for "custom" mode
+        }
+    }
 }
 ```
 
@@ -82,7 +92,7 @@ userid:username:email:password:cookie
 
 ## ✨ Stars to unlock
 - ⭐️ **20 stars: Email verification** - 🎉 *UNLOCKED!*
-- ⭐️ **50 stars: Change display name after creation** - ⏳ *COMING SOON!*
+- ⭐️ **50 stars: Change display name after creation** - 🎉 *UNLOCKED!*
 - ⭐️ **85 stars: Join group after creation**
 - ⭐️ **100 stars: Change avatar after creation**
 - ⭐️ **140 stars: Follow user after creation**
