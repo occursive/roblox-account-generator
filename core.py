@@ -23,6 +23,14 @@ captcha_fail_lock = threading.Lock()
 custom_password_fail_lock = threading.Lock()
 insufficient_balance_lock = threading.Lock()
 
+EV_ENABLED_RUNTIME = False
+DISPLAY_NAME_CFG_RUNTIME = {}
+
+def set_runtime_options(ev_enabled, display_cfg):
+    global EV_ENABLED_RUNTIME, DISPLAY_NAME_CFG_RUNTIME
+    EV_ENABLED_RUNTIME = bool(ev_enabled)
+    DISPLAY_NAME_CFG_RUNTIME = display_cfg if isinstance(display_cfg, dict) else {}
+
 def thread_worker():
     global consecutive_captcha_fails, consecutive_custom_password_fails, consecutive_insufficient_balance, thread_restart_enabled
     while thread_restart_enabled:
@@ -56,7 +64,7 @@ def thread_worker():
                 raw_token = response.text.split('data-token="')[1].split('"')[0]
                 csrf_token = html.unescape(raw_token)
 
-            username = generate_username()
+            username, basic_display_name = generate_username()
             birthday = generate_birthday()
             password = get_password()
 
@@ -89,7 +97,7 @@ def thread_worker():
                 if data["message"] == "Token Validation Failed":
                     fprint("Token Validation Failed - likely caused by rotating proxy")
                 else:
-                    username = generate_username()
+                    username, basic_display_name = generate_username()
 
                 payload = {
                     "username": username,
@@ -127,7 +135,7 @@ def thread_worker():
 
             if data["message"] != "Password is valid":
                 config = load_config()
-                if config.get("custom_password", {}).get("enabled", False):
+                if config.get("account_settings", {}).get("custom_password", {}).get("enabled", False):
                     with custom_password_fail_lock:
                         if consecutive_custom_password_fails >= MAX_CONSECUTIVE_CUSTOM_PASSWORD_FAILS:
                             continue
@@ -188,7 +196,7 @@ def thread_worker():
                 continue
                 
             solver_func = SOLVER_FUNCTIONS[SOLVER]
-            data, reason = solver_func(blob, proxy, API_KEY, TIMEOUT)
+            data, reason = solver_func(session, blob, proxy, API_KEY, TIMEOUT)
 
             if data == None:
                 if "Insufficient solves" in reason:
@@ -258,63 +266,97 @@ def thread_worker():
             user_id = data['userId']
             cookie = response.cookies['.ROBLOSECURITY']
             
-            config = load_config()
-            if config.get("email_verification", False):
-                response = session.get(url="https://www.roblox.com/home", headers=headers1())
+            verified = False
+            set_display_name = False
+            email = None
 
+            ev_enabled = EV_ENABLED_RUNTIME
+            dn_cfg = DISPLAY_NAME_CFG_RUNTIME
+
+            custom_display_name_enabled = False
+            display_name = None
+            if isinstance(dn_cfg, dict):
+                custom_display_name_enabled = dn_cfg.get("enabled", False)
+                mode = dn_cfg.get("mode", "custom")
+                if custom_display_name_enabled:
+                    if mode == "custom":
+                        display_name = dn_cfg.get("custom_name", "").strip()
+                        if not display_name:
+                            wprint("Display name: custom mode selected but 'custom_name' is empty. Skipping display name update.")
+                            custom_display_name_enabled = False
+                    elif mode == "from_username":
+                        display_name = basic_display_name
+                    else:
+                        custom_display_name_enabled = False
+
+            need_csrf = ev_enabled or custom_display_name_enabled
+            csrf_ready = True
+            if need_csrf:
+                response = session.get(url="https://www.roblox.com/home", headers=headers1(), timeout=15)
                 if "data-token=" in response.text:
                     raw_token = response.text.split('data-token="')[1].split('"')[0]
                     csrf_token = html.unescape(raw_token)
+                else:
+                    wprint("Failed to fetch CSRF token for post-creation actions.")
+                    csrf_ready = False
 
-                    email, reason = get_email(session)
-                    
-                    if email:
-                        payload = {
-                            "emailAddress": email,
-                            "password": ""
-                        }
-                        
-                        response = session.post(url="https://accountsettings.roblox.com/v1/email", headers=headers6(csrf_token, "accountsettings.roblox.com"), json=payload, timeout=15)
-                        
-                        if response.status_code == 200:
-                            ticket, reason = get_inbox(session, email)
-                            if ticket:                     
-                                payload = {
-                                    "ticket": ticket
-                                }
-                                
-                                response = session.post(url="https://accountinformation.roblox.com/v1/email/verify", headers=headers6(csrf_token, "accountinformation.roblox.com"), json=payload, timeout=15)
-                                
-                                if "verifiedUserHatAssetId" in response.text:
-                                    with lock:
-                                        os.makedirs("output", exist_ok=True)
-                                        with open("output/verified_accounts.txt", "a", encoding="utf-8") as file:
-                                            file.write(f"{user_id}:{username}:{email}:{password}:{cookie}\n")
-                                    crprint(f"Account created & email verified: {username}")
-                                    update_counter("generated")
-                                    continue
-                                else:
-                                    wprint(f"Email verify failed with status code {response.status_code}: {response.url}")
+            if custom_display_name_enabled and csrf_ready:
+                payload = {
+                    "userId": user_id,
+                    "newDisplayName": display_name,
+                    "showAgedUpDisplayName": False
+                }
+                response = session.patch(url=f"https://users.roblox.com/v1/users/{user_id}/display-names", headers=headers6(csrf_token, "users.roblox.com"), json=payload, timeout=15)
+                if response.status_code == 200:
+                    set_display_name = True
+                else:
+                    wprint(f"Display name change failed with status code {response.status_code}: {response.text}")
+
+            if ev_enabled and csrf_ready:
+                email, reason = get_email(session)
+                if email:
+                    payload = {
+                        "emailAddress": email,
+                        "password": ""
+                    }
+                    response = session.post(url="https://accountsettings.roblox.com/v1/email", headers=headers6(csrf_token, "accountsettings.roblox.com"), json=payload, timeout=15)
+                    if response.status_code == 200:
+                        ticket, reason = get_inbox(session, email)
+                        if ticket:
+                            payload = {"ticket": ticket}
+                            response = session.post(url="https://accountinformation.roblox.com/v1/email/verify", headers=headers6(csrf_token, "accountinformation.roblox.com"), json=payload, timeout=15)
+                            if "verifiedUserHatAssetId" in response.text:
+                                verified = True
                             else:
-                                wprint(f"Failed to fetch inbox content: {reason}")
+                                wprint(f"Email verify failed with status code {response.status_code}: {response.url}")
                         else:
-                            wprint(f"Email verify failed with status code {response.status_code}: {response.url}")
+                            wprint(f"Failed to fetch inbox content: {reason}")
                     else:
-                        wprint(f"Failed to fetch temp email from API: {reason}")
-                with lock:
-                    os.makedirs("output", exist_ok=True)
+                        wprint(f"Email verify failed with status code {response.status_code}: {response.url}")
+                else:
+                    wprint(f"Failed to fetch temp email from API: {reason}")
+
+            with lock:
+                os.makedirs("output", exist_ok=True)
+                if verified and custom_display_name_enabled and set_display_name:
+                    with open("output/verified_accounts.txt", "a", encoding="utf-8") as file:
+                        file.write(f"{user_id}:{username}:{email}:{password}:{cookie}\n")
+                    msg = f"Account created & email verified: @{username} ({display_name})"
+                elif verified:
+                    with open("output/verified_accounts.txt", "a", encoding="utf-8") as file:
+                        file.write(f"{user_id}:{username}:{email}:{password}:{cookie}\n")
+                    msg = f"Account created & email verified: @{username}"
+                elif custom_display_name_enabled and set_display_name:
                     with open("output/accounts.txt", "a", encoding="utf-8") as file:
                         file.write(f"{user_id}:{username}:{password}:{cookie}\n")
-                crprint(f"Account created (email verification failed): {username}")
-                update_counter("generated")
-                continue
-            else:
-                with lock:
-                    os.makedirs("output", exist_ok=True)
+                    msg = f"Account created: @{username} ({display_name})"
+                else:
                     with open("output/accounts.txt", "a", encoding="utf-8") as file:
                         file.write(f"{user_id}:{username}:{password}:{cookie}\n")
-                crprint(f"Account created: {username}")
-                update_counter("generated")
+                    msg = f"Account created: @{username}"
+            crprint(msg)
+            update_counter("generated")
+            continue
             
         except Exception as e:
             error_msg = str(e).lower()
