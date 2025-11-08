@@ -18,6 +18,12 @@ thread_restart_enabled = True
 threads_list = []
 thread_counter = 0
 
+CUSTOM_PASSWORD_CFG_RUNTIME = {}
+
+def set_runtime_custom_password(cfg):
+    global CUSTOM_PASSWORD_CFG_RUNTIME
+    CUSTOM_PASSWORD_CFG_RUNTIME = cfg if isinstance(cfg, dict) else {}
+
 def get_time():
     return datetime.now().strftime("%H:%M:%S")
 
@@ -41,18 +47,34 @@ def generate_username():
     roots = ["zarn", "milo", "trev", "kayn", "luro", "jex", "naro", "vask", "dren", "xilo",
             "rilo", "synd", "quav", "bray", "tarn", "zayv", "lom", "fayr", "keld", "rix",
             "tharn", "vynz", "calo", "dran", "zelv", "fray", "nyro", "bex", "krev", "jorn",
-            "sarn", "vex", "kryn", "drax", "lyn", "zor", "velk", "garo", "phin", "trex"]
+            "sarn", "vex", "kryn", "drax", "lyn", "zor", "velk", "garo", "phin", "trex",
+            "valk", "kael", "rius", "zeph", "noct", "aero", "viro", "arv", "kaid", "jor",
+            "quin", "raen", "xen", "ziv", "torv", "rusk", "fenn", "kael", "tavi", "rusk",
+            "sol", "kaos", "vyr", "zeno", "kade", "jexi", "nex", "aeth", "thane", "kaiv",
+            "orik", "ravn", "skye", "thor", "ivar", "zeke", "zael", "dane", "mira", "lyra",
+            "nyx", "kairo", "aldr", "dorian", "voss", "noxx", "ryke", "tovin", "fyr", "krix"]
     mods = ["flux", "dyn", "vyn", "stral", "grim", "lok", "vorn", "pran", "kaze", "thal",
             "myrk", "jinn", "zern", "cray", "vohl", "drux", "blen", "snok", "quen", "vrak",
-            "zelk", "fryn", "nox", "brak", "skel", "throx", "drax", "vok", "kran", "morn"]
-    ends = ["", "", "", str(random.randint(10,99)), str(random.randint(100,999)), str(random.randint(2005,2024)),
-            "ix", "or", "en", "um", "ax", "ul", "ev", "ar", "us", "et"]
-    u = random.choice(roots).capitalize() + random.choice(mods)
-    if random.random() < 0.5: u += random.choice(ends)
+            "zelk", "fryn", "nox", "brak", "skel", "throx", "drax", "vok", "kran", "morn",
+            "shade", "volt", "nova", "rift", "blade", "quake", "storm", "ember", "flare", "frost",
+            "bane", "hex", "lynx", "onyx", "pyre", "scorn", "venm", "wraith", "zeal", "geist",
+            "drift", "gale", "void", "glint", "grimr", "haze", "spyr", "thorn", "quake", "wyrm"]
+    ends = ["", "", "", str(random.randint(10, 99)), str(random.randint(100, 999)), str(random.randint(2005, 2024)),
+            "ix", "or", "en", "um", "ax", "ul", "ev", "ar", "us", "et",
+            "ion", "eus", "ius", "ean", "iel", "iel", "yx", "yx", "or", "is",
+            "jr", "sr", "the", "neo", "arc", "kai", "zan", "rex", "lyn", "raz",
+            "xv", "xii", "ix", "iv"]
+
+    base = random.choice(roots).capitalize() + random.choice(mods)
+    username = base
+    if random.random() < 0.5:
+        username += random.choice(ends)
     for a, b in [("a","4"), ("i","1"), ("o","0"), ("e","3")]:
-        if random.random() < 0.25: u = u.replace(a, b)
-    if len(u) < 15: u += str(random.randint(100,999))
-    return u[:20]
+        if random.random() < 0.25:
+            username = username.replace(a, b)
+    if len(username) < 15:
+        username += str(random.randint(100,999))
+    return username[:20], base
 
 def generate_birthday():
     return f"{random.randint(1990,2004)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}T22:00:00.000Z"
@@ -67,13 +89,10 @@ def generate_password():
     return ''.join(password)
 
 def get_password():
-    config = load_config()
-    custom_password = config.get("custom_password", {})
-    
+    custom_password = CUSTOM_PASSWORD_CFG_RUNTIME if isinstance(CUSTOM_PASSWORD_CFG_RUNTIME, dict) else {}
     if custom_password.get("enabled", False):
         return custom_password.get("password")
-    else:
-        return generate_password()
+    return generate_password()
 
 def load_proxies(filename):
     if not os.path.exists(filename):
@@ -133,7 +152,7 @@ def load_proxies(filename):
                     file.write(proxy + "\n")
             wprint("Removed http:// prefixes from proxies.txt and saved changes.")
         except Exception as e:
-            fprint(f"Error updating proxy file: {e}")
+            fprint(f"Error updating proxy file: {e}.")
 
     return validated_proxies
 
@@ -148,34 +167,68 @@ def load_config():
                 fprint("Currently only 'http' is supported.")
                 safe_exit()
             
-            email_verification = config.get("email_verification", None)
-            if email_verification is not None and not isinstance(email_verification, bool):
-                fprint(f"Error: Invalid email_verification '{email_verification}' in config.json.")
-                fprint("The 'email_verification' field in config.json must be set to either true or false.")
+            account_settings = config.get("account_settings", {})
+            email_verification_cfg = account_settings.get("email_verification", None)
+            if isinstance(email_verification_cfg, bool) or email_verification_cfg is None:
+                pass
+            elif isinstance(email_verification_cfg, dict):
+                enabled = email_verification_cfg.get("enabled", False)
+                if not isinstance(enabled, bool):
+                    fprint("Error: account_settings.email_verification.enabled must be true/false in config.json.")
+                    safe_exit()
+            else:
+                fprint("Error: account_settings.email_verification must be a boolean or an object in config.json.")
                 safe_exit()
+
+            display_cfg = account_settings.get("display_name", {})
+            if display_cfg:
+                if not isinstance(display_cfg, dict):
+                    fprint("Error: account_settings.display_name must be an object in config.json.")
+                    safe_exit()
+                dn_enabled = display_cfg.get("enabled", False)
+                if not isinstance(dn_enabled, bool):
+                    fprint("Error: account_settings.display_name.enabled must be true/false in config.json.")
+                    safe_exit()
+                mode = display_cfg.get("mode", "custom")
+                if mode not in ("custom", "from_username"):
+                    fprint("Error: account_settings.display_name.mode must be 'custom' or 'from_username'.")
+                    safe_exit()
+                if dn_enabled and mode == "custom":
+                    custom_name = display_cfg.get("custom_name", "")
+                    if not isinstance(custom_name, str):
+                        fprint("Error: account_settings.display_name.custom_name must be a string.")
+                        safe_exit()
+                    if not custom_name.strip():
+                        fprint("Error: account_settings.display_name.custom_name cannot be empty when mode is 'custom'.")
+                        safe_exit()
+                    name_len = len(custom_name.strip())
+                    if name_len < 3 or name_len > 20:
+                        fprint("Error: account_settings.display_name.custom_name must be between 3 and 20 characters.")
+                        safe_exit()
             
-            custom_password = config.get("custom_password", {})
+            account_settings = config.get("account_settings", {})
+            custom_password = account_settings.get("custom_password", {})
             if custom_password.get("enabled", False):
                 password = custom_password.get("password", "")
                 if not password:
-                    fprint("Error: Custom password is enabled but password field is empty in config.json")
+                    fprint("Error: account_settings.custom_password.password cannot be empty when custom_password.enabled is true.")
                     safe_exit()
                 if len(password) < 8:
-                    fprint(f"Error: Custom password must be at least 8 characters long (current: {len(password)})")
+                    fprint(f"Error: account_settings.custom_password.password must be at least 8 characters (current: {len(password)}).")
                     safe_exit()
                 if len(password) > 200:
-                    fprint(f"Error: Custom password must not exceed 200 characters (current: {len(password)})")
+                    fprint(f"Error: account_settings.custom_password.password must be at most 200 characters (current: {len(password)}).")
                     safe_exit()
                 
             return config
     except FileNotFoundError:
-        fprint("Config file not found: config.json")
+        fprint("Config file not found: config.json.")
         safe_exit()
     except json.JSONDecodeError:
         fprint("Invalid JSON in config.json.")
         safe_exit()
     except Exception as e:
-        fprint(f"Error loading config: {e}")
+        fprint(f"Error loading config: {e}.")
         safe_exit()
 
 def validate_solver_config():
@@ -190,20 +243,20 @@ def validate_solver_config():
     selected_solver = captcha_settings.get("selected_solver", "")
     
     if not selected_solver:
-        fprint("Error: selected_solver is empty in config.json.")
-        fprint(f"Valid options are: {', '.join(valid_solvers)}")
+        fprint("Error: captcha_settings.selected_solver cannot be empty in config.json.")
+        fprint(f"Valid options are: {', '.join(valid_solvers)}.")
         safe_exit()
     
     if selected_solver not in valid_solvers:
         fprint(f"Error: Invalid solver '{selected_solver}' in config.json.")
-        fprint(f"Valid options are: {', '.join(valid_solvers)}")
+        fprint(f"Valid options are: {', '.join(valid_solvers)}.")
         safe_exit()
     
     api_keys = captcha_settings.get("api_keys", {})
     api_key = api_keys.get(selected_solver, "")
     
     if not api_key:
-        fprint(f"Error: API key for '{selected_solver}' is empty in config.json.")
+        fprint(f"Error: captcha_settings.api_keys.{selected_solver} cannot be empty in config.json.")
         fprint(f"Please add your {selected_solver} API key to captcha_settings.api_keys.{selected_solver} in config.json.")
         safe_exit()
     
@@ -294,7 +347,7 @@ def input_thread_count():
     global target_thread_count
     while True:
         try:
-            thread_count = input(f"{f.LIGHTBLUE_EX}  > Enter number of threads (1-20): {s.RESET_ALL}")
+            thread_count = input(f"\n{f.LIGHTBLUE_EX}  > Enter number of threads (1-20): {s.RESET_ALL}")
             if thread_count.isdigit():
                 thread_count = int(thread_count)
                 if 1 <= thread_count <= 20:
