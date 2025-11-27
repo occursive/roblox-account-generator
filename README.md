@@ -93,7 +93,7 @@ userid:username:email:password:cookie
 ## ✨ Stars to unlock
 - ⭐️ **20 stars: Email verification** - 🎉 *UNLOCKED!*
 - ⭐️ **50 stars: Change display name after creation** - 🎉 *UNLOCKED!*
-- ⭐️ **85 stars: Join group after creation**
+- ⭐️ **85 stars: Join group after creation** - ⏳ *COMING SOON!*
 - ⭐️ **100 stars: Change avatar after creation**
 - ⭐️ **140 stars: Follow user after creation**
 - ⭐️ **150+ stars: Your ideas**
